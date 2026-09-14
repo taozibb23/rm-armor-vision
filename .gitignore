@@ -1,0 +1,15 @@
+# 编译产物
+02-onnx-inference/draw_refactored
+02-onnx-inference/infer
+02-onnx-inference/dump
+02-onnx-inference/ort_probe
+*.o
+# 大文件（模型/视频不入库；README 里说明"自行训练/看演示链接"）
+*.onnx
+*.pt
+*.mp4
+*.avi
+# ROS2 构建产物
+build/
+install/
+log/
