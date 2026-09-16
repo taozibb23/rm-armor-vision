@@ -1,3 +1,9 @@
+> 📄 **本文已发布在 CSDN**：https://blog.csdn.net/2604_96052374/article/details/165356050
+> 💻 **配套代码仓库**：https://github.com/taozibb23/rm-armor-vision
+> （以下为全文存档）
+
+---
+
 # 把 YOLO 装甲板检测接进 ROS2：从单机程序到图像话题
 
 > 环境：Ubuntu 22.04 / ROS2 Humble / onnxruntime（CPU）/ OpenCV 4.5.4

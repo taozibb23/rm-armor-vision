@@ -115,10 +115,18 @@ rviz2                           # Add → By topic → /armor_image → Image
 
 ## 相关链接
 
-- 博客（三篇）
-  1. 从 8400 张卡片到画出一个框（C++ 推理全流程）
-  2. 从零训练 YOLO26-pose 到 C++ 部署
-  3. 把 YOLO 装甲板检测接进 ROS2
+### 配套博客（CSDN，三篇，对应本仓库三个环节）
+
+| 环节 | 文章 | 数据 |
+|---|---|---|
+| ① C++ 推理全流程 | [从 8400 张卡片到画框：用 C++ 跑通 YOLO 姿态模型](https://blog.csdn.net/2604_96052374/article/details/164992742) | 395 阅读 · 6 赞 |
+| ② 训练 | [训练一个关键点模型（You Only Look Once）YOLO](https://blog.csdn.net/2604_96052374/article/details/165122893) | 330 阅读 · 3 赞 |
+| ③ ROS2 集成 | [YOLO 装甲板检测接入 ROS2](https://blog.csdn.net/2604_96052374/article/details/165356050) | 280 阅读 · 3 赞 |
+
+> 三篇文章的全文也放在本仓库 [`docs/`](docs/) 里。
+
+### 其它
+
 - 传统视觉装甲板检测项目：`RM_project`（HSV 阈值 + 灯条几何配对 + 串口通信）
 - 作者主页：<https://blog.csdn.net/2604_96052374>
 

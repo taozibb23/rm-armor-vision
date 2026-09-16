@@ -1,3 +1,9 @@
+> 📄 **本文已发布在 CSDN**：https://blog.csdn.net/2604_96052374/article/details/165122893
+> 💻 **配套代码仓库**：https://github.com/taozibb23/rm-armor-vision
+> （以下为全文存档）
+
+---
+
 # 有没有想过自己训练一个关键点模型却不知道从何下手？今天就来教会你（YOLO26-pose 装甲板实战）
 
 > 环境：Ubuntu 22.04 / RTX 4060 Laptop（8G 显存）/ ultralytics 8.4.142 / torch 2.14.0+cu130

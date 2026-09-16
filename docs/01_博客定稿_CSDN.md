@@ -1,3 +1,9 @@
+> 📄 **本文已发布在 CSDN**：https://blog.csdn.net/2604_96052374/article/details/164992742
+> 💻 **配套代码仓库**：https://github.com/taozibb23/rm-armor-vision
+> （以下为全文存档）
+
+---
+
 # 从 8400 张卡片到画出一个框：我用 C++ 跑通 YOLO 姿态模型（装甲板检测部署实录）
 
 > 摘要：把训练好的 YOLO26-pose 装甲板模型导出 ONNX，再用 C++ + onnxruntime 实现"预处理 → 推理 → 解码 → 去重 → 画框"全流程，并记录中间踩过的坑。  
