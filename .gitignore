@@ -18,6 +18,10 @@
 *.avi
 *.mov
 
+# 例外：README 用的演示素材要入库
+!docs/demo.mp4
+!docs/demo.gif
+
 # ROS2 构建产物
 build/
 install/
