@@ -1,15 +1,32 @@
-# 编译产物
+# 编译产物 / 可执行文件
+*.o
+*.out
+02-onnx-inference/draw
 02-onnx-inference/draw_refactored
 02-onnx-inference/infer
 02-onnx-inference/dump
 02-onnx-inference/ort_probe
-*.o
-# 大文件（模型/视频不入库；README 里说明"自行训练/看演示链接"）
+03-ros2-integration/armor_pkg/src/cam_test
+03-ros2-integration/armor_pkg/src/*_node
+03-ros2-integration/armor_pkg/src/vision_node
+
+# 大文件（模型 / 视频不入库；README 里说明复现方式）
 *.onnx
 *.pt
+*.pth
 *.mp4
 *.avi
+*.mov
+
 # ROS2 构建产物
 build/
 install/
 log/
+
+# 数据集（体积大，用公开数据集自行下载）
+XJTLU_2023_Keypoints_ALL/
+*.tar.gz
+
+# 编辑器
+.vscode/
+.idea/

@@ -1,0 +1,37 @@
+# 数据集配置 —— 把 path 改成你自己的数据集目录
+#
+# 目录结构要求：
+#   <path>/
+#   ├── images/train/*.jpg
+#   ├── images/val/*.jpg
+#   ├── labels/train/*.txt
+#   └── labels/val/*.txt
+
+path: ./XJTLU_2023_Keypoints_ALL   # ← 改成你自己的路径（绝对路径最保险）
+train: images/train
+val: images/val
+
+# 14 个类别（R=红方 B=蓝方 O=前哨站 S=基地）
+names:
+  0: B1
+  1: B2
+  2: B3
+  3: B4
+  4: B5
+  5: BO
+  6: BS
+  7: R1
+  8: R2
+  9: R3
+  10: R4
+  11: R5
+  12: RO
+  13: RS
+
+# ⚠️ 关键点顺序必须固定，推理侧代码要照抄这个顺序，错一位 PnP 结果全错
+kpt_shape: [4, 2]
+kpt_names:
+  0: left_top
+  1: left_bottom
+  2: right_bottom
+  3: right_top
