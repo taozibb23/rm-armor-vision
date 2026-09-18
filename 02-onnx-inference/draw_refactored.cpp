@@ -21,6 +21,7 @@
 #include <array>
 #include <iostream>
 #include <vector>
+#include <fstream>
 
 // ============ 常量：把"魔法数字"命名，看名字就懂含义 ============
 constexpr int   kInputSize    = 640;                        // 模型输入边长
@@ -145,54 +146,33 @@ std::vector<int> nmsTopK(const std::vector<Det>& dets) {
 
 // ============ 6) 画框：候选 → 可视化 ============
 void draw(cv::Mat& canvas, const std::vector<Det>& dets,
-          const std::vector<int>& kept, float scale) {
+          const std::vector<int>& kept) {
     for (int idx : kept) {
         const Det& d = dets[idx];
-        const float cx = d.cx / scale , cy = d.cy /scale;
-        const float w  = d.w / scale, h = d.h /scale;
-        const cv::Rect r(cvRound(cx - w / 2), cvRound(cy - h / 2),
-                         cvRound(w), cvRound(h));
+        const cv::Rect r(cvRound(d.cx - d.w / 2), cvRound(d.cy - d.h / 2),
+                         cvRound(d.w), cvRound(d.h));
         cv::rectangle(canvas, r, cv::Scalar(0, 255, 0), 2);              // 绿框
         cv::putText(canvas, kClassNames[d.cls], cv::Point(r.x, r.y - 5),
                     cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
 
         std::vector<cv::Point> poly;                                     // 4 角点连线
         for (int k = 0; k < kKptRows; k += 2) {
-            poly.push_back(cv::Point(cvRound(d.kpts[k] / scale), cvRound(d.kpts[k + 1] / scale)));
+            poly.push_back(cv::Point(cvRound(d.kpts[k]), cvRound(d.kpts[k + 1])));
         }
         cv::polylines(canvas, poly, true, cv::Scalar(0, 0, 255), 2);     // 红折线
     }
 }
 
-// ============ main：只做编排，一眼看清整条管线 ============
-int main(int argc, char** argv) {
-    if (argc < 3) {
-        std::cout << "用法: ./draw_refactored <模型.onnx> <视频>\n";
-        return 1;
-    }
-
-    // 1. 打开模型
-    Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "armor");
-    Ort::Session session(env, argv[1], Ort::SessionOptions(nullptr));
-
-
-    // 2. 读视频 + 预处理
-    cv::VideoCapture cap(argv[2]);
-    if(!cap.isOpened()){std::cout << "视频打不开\n"; return 1;}
-    const double fps = cap.get(cv::CAP_PROP_FPS) > 0 ? cap.get(cv::CAP_PROP_FPS) : 30.0;
-    const int fourcc = cv::VideoWriter::fourcc('m','p','4','v');
-    cv::VideoWriter writer;
-    bool writerReady = false;
-    cv::Mat frame;
+// =============7 图片的推理 ======================
+void processFrame(cv::Mat &img, Ort::Session &session, std::ofstream &f, int frameIndx)
+{   
     
-    
-    while (cap.read(frame)){
-        if(frame.empty()){break;}
-        float scale = 1.f;                                   // 预留：还原原图坐标时用
-        cv::Mat canvas = makeLetterbox(frame, scale);
-        std::vector<float> input = toTensor(canvas);
-    
-    // 3. 推理
+
+    //=============处理逻辑全流程============
+    float scale = 1.f;
+    cv::Mat canvas = makeLetterbox(img, scale);
+    std::vector<float> input = toTensor(canvas);
+
     std::array<int64_t, 4> inShape{1, 3, kInputSize, kInputSize};
     auto mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
     auto tensor = Ort::Value::CreateTensor<float>(
@@ -203,7 +183,6 @@ int main(int argc, char** argv) {
     auto outputs = session.Run(Ort::RunOptions{nullptr}, inNames, &tensor, 1,
                                outNames, 1);
 
-    // 4. 解码 → 排序 → 去重
     const auto shape = outputs[0].GetTensorTypeAndShapeInfo().GetShape();
     const float* p = outputs[0].GetTensorData<float>();
     const int64_t numCandidates = shape[2];              // 8400
@@ -212,21 +191,59 @@ int main(int argc, char** argv) {
               [](const Det& a, const Det& b) { return a.conf > b.conf; });
     std::vector<int> kept = nmsTopK(dets);
 
-    // 5. 输出 + 画图（画布空间；下一步做"坐标还账"再回到原图）
-    std::cout << "候选数: " << dets.size()
-              << "  NMS 后保留: " << kept.size() << "\n";
     for (int idx : kept) {
-        std::cout << "保留 idx=" << idx
-                  << " 类=" << kClassNames[dets[idx].cls]
-                  << " conf=" << dets[idx].conf << "\n";
+    auto left_top = cv::Point2f(dets[idx].kpts[0]/scale, dets[idx].kpts[1]/scale);
+    auto left_bottom = cv::Point2f(dets[idx].kpts[2]/scale, dets[idx].kpts[3]/scale);
+    auto right_bottom = cv::Point2f(dets[idx].kpts[4]/scale, dets[idx].kpts[5]/scale);
+    auto right_top = cv::Point2f(dets[idx].kpts[6]/scale, dets[idx].kpts[7]/scale);
+    auto cx = (dets[idx].kpts[0] + dets[idx].kpts[2] + dets[idx].kpts[4] + dets[idx].kpts[6]) / 4 / scale;
+    auto cy = (dets[idx].kpts[1] + dets[idx].kpts[3] + dets[idx].kpts[5] + dets[idx].kpts[7]) / 4 / scale;
+    auto dx = left_bottom.x - left_top.x;
+    auto dy = left_bottom.y - left_top.y;
+    auto angle_rad = atan2(dx, dy);
+    auto angle_deg = angle_rad * 180 / CV_PI;
+        f << frameIndx << "," << idx << "," << kClassNames[dets[idx].cls] << "," << dets[idx].conf << "," << cx << "," << cy << "," << angle_deg << "\n";
     }
-    draw(frame, dets, kept, scale);
-        if(!writerReady){
-        writer.open("out.mp4", fourcc, fps, frame.size());
-        writerReady = true;
+    draw(canvas, dets, kept);
+}
+// ============ main：只做编排，一眼看清整条管线 ============
+int main(int argc, char** argv) {
+    if (argc < 3) {
+        std::cout << "用法: ./draw_refactored <模型.onnx> <图片>\n";
+        return 1;
+    }
+    int imgFrame = 0;
+    int frameidx = 0;
+    cv::Mat videoframe;
+    std::ofstream f("angles.csv");
+    f << "frame,det_idx,cls,conf,cx,cy,angle_deg\n";
+    // 1. 打开模型
+    Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "armor");
+    Ort::Session session(env, argv[1], Ort::SessionOptions(nullptr));
+
+    // 2. 读图 + 预处理
+    cv::Mat img = cv::imread(argv[2]);
+    if(!img.empty())
+    {
+        processFrame(img, session, f, imgFrame);
+        f.close();
+    }
+    if (img.empty()) 
+    { 
+        std::cout << "参数给的是视频流"<<std::endl; 
+        cv::VideoCapture cap(argv[2]);
+        double fps = cap.get(cv::CAP_PROP_FPS);
+        while(true)
+        {   
+            cap >> videoframe;
+            if(videoframe.empty()) break;
+            processFrame(videoframe, session, f, frameidx);
+            ++frameidx;
+            int delay = (fps > 0) ? (int)(1000.0 / fps) : 30;
+            if(cv::waitKey(delay) == 27)break;
         }
-    writer.write(frame);
+        cap.release();
+        f.close();
     }
-    std::cout << "已保存 out.mp4\n";
     return 0;
 }
