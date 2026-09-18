@@ -239,8 +239,6 @@ int main(int argc, char** argv) {
             if(videoframe.empty()) break;
             processFrame(videoframe, session, f, frameidx);
             ++frameidx;
-            int delay = (fps > 0) ? (int)(1000.0 / fps) : 30;
-            if(cv::waitKey(delay) == 27)break;
         }
         cap.release();
         f.close();
