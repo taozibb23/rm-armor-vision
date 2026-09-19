@@ -34,3 +34,5 @@ XJTLU_2023_Keypoints_ALL/
 # 编辑器
 .vscode/
 .idea/
+02-onnx-inference/angles.csv
+02-onnx-inference/draw_result.jpg
