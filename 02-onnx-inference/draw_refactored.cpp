@@ -22,6 +22,8 @@
 #include <iostream>
 #include <vector>
 #include <fstream>
+#include <cmath>
+#include <cstdlib>
 
 // ============ 常量：把"魔法数字"命名，看名字就懂含义 ============
 constexpr int   kInputSize    = 640;                        // 模型输入边长
@@ -34,7 +36,7 @@ constexpr int   kKptRow0      = kBoxRows + kNumClasses;     // 角点行起点  
 constexpr int   kNumRows      = kKptRow0 + kKptRows;        // 总行数 = 26
 constexpr float kConfThr      = 0.25f;                      // 候选门槛（越低召回越高）
 constexpr float kIouThr       = 0.5f;                       // 同簇判定：重合多少算同一目标
-constexpr int   kKeepTop      = 2;                          // 每簇最多保留几个候选
+constexpr int   kKeepTop      = 2;                          // 每簇最多保留几个候选   // 每簇留 2 条：簇首几何不合格时第二候选可顶替 实测（500 帧测试片段）：救回次数 = 0 即簇首基本都合格；保留作为低成本保险
 constexpr float kPadValue     = 114.f;                      // letterbox 灰边值（必须与训练一致）
 constexpr float kNormScale    = 255.0f;                     // 像素归一化除数
 
@@ -130,20 +132,28 @@ float iou(const Det& a, const Det& b) {
     return (uni > 0.f) ? inter / uni : 0.f;
 }
 
-// ============ 5) NMS（宽松版）：每簇最多留 kKeepTop 个 ============
-// 约定：dets 已按 conf 降序。数"已保留里同簇的数量"，没满 K 就留下
-std::vector<int> nmsTopK(const std::vector<Det>& dets) {
-    std::vector<int> kept;
-    for (size_t i = 0; i < dets.size(); ++i) {
-        int sameCluster = 0;
-        for (int idx : kept) {
-            if (iou(dets[i], dets[idx]) > kIouThr) { ++sameCluster; }
+// ============ 5) NMS ============
+// 找簇的归属
+std::vector<std::vector<int>> nms(const std::vector<Det>& dets) {
+    std::vector<std::vector<int>> kept;
+    for(size_t i = 0; i < dets.size(); ++i){//外层的i 遍历所有
+        int belong = -1; //说明没有归属
+        for(int g = 0; g < (int)kept.size(); ++g){//遍历簇
+            if(iou(dets[i],dets[kept[g][0]]) > kIouThr){//和这个簇做比较
+                belong = g;
+                break;
+            }
         }
-        if (sameCluster < kKeepTop) { kept.push_back((int)i); }
+    if(belong >= 0){//前面找到了簇归属
+        if((int)kept[belong].size() < kKeepTop){
+            kept[belong].push_back((int)i);
+        }
+    }else{
+        kept.push_back({(int)i});
+    }    
     }
     return kept;
 }
-
 // ============ 6) 画框：候选 → 可视化 ============
 void draw(cv::Mat& canvas, const std::vector<Det>& dets,
           const std::vector<int>& kept) {
@@ -162,11 +172,19 @@ void draw(cv::Mat& canvas, const std::vector<Det>& dets,
         cv::polylines(canvas, poly, true, cv::Scalar(0, 0, 255), 2);     // 红折线
     }
 }
+/// @brief 计算方法
+/// @param a 点
+/// @param b 点
+/// @return a.x * b.y - a.y * b.x;
+float cross(cv::Point2f a,cv::Point2f b)
+{
+    return a.x * b.y - a.y * b.x;
+}
+
 
 // =============7 图片的推理 ======================
 void processFrame(cv::Mat &img, Ort::Session &session, std::ofstream &f, int frameIndx)
 {   
-    
 
     //=============处理逻辑全流程============
     float scale = 1.f;
@@ -189,22 +207,53 @@ void processFrame(cv::Mat &img, Ort::Session &session, std::ofstream &f, int fra
     std::vector<Det> dets = decode(p, numCandidates);
     std::sort(dets.begin(), dets.end(),
               [](const Det& a, const Det& b) { return a.conf > b.conf; });
-    std::vector<int> kept = nmsTopK(dets);
+    std::vector<std::vector<int>> kept = nms(dets);
+    std::vector<int> finalKept;
+    for(auto g : kept){//kept里面选出簇也就是外层
+        for (int idx : g){//簇里面再次选内层的
+        auto left_top = cv::Point2f(dets[idx].kpts[0]/scale, dets[idx].kpts[1]/scale);
+        auto left_bottom = cv::Point2f(dets[idx].kpts[2]/scale, dets[idx].kpts[3]/scale);
+        auto right_bottom = cv::Point2f(dets[idx].kpts[4]/scale, dets[idx].kpts[5]/scale);
+        auto right_top = cv::Point2f(dets[idx].kpts[6]/scale, dets[idx].kpts[7]/scale);
+        auto cx = (dets[idx].kpts[0] + dets[idx].kpts[2] + dets[idx].kpts[4] + dets[idx].kpts[6]) / 4 / scale;
+        auto cy = (dets[idx].kpts[1] + dets[idx].kpts[3] + dets[idx].kpts[5] + dets[idx].kpts[7]) / 4 / scale;
+        auto dx = left_bottom.x - left_top.x;
+        auto dy = left_bottom.y - left_top.y;
+        auto angle_rad = atan2(dx, dy);
+        auto angle_deg = angle_rad * 180 / CV_PI;
+            
+         //=====================opencv===============
+         //二维差积   判断同号
+        auto P0 = left_top;
+        auto P1 = left_bottom;
+        auto P2 = right_bottom;
+        auto P3 = right_top;
+        //计算突四边形
+        auto c0 = cross(P1-P0, P2-P1);
+        auto c1 = cross(P2-P1, P3-P2);
+        auto c2 = cross(P3-P2, P0-P3);
+        auto c3 = cross(P0-P3, P1-P0);
+        bool allSameSign = 
+        (c0 > 0 && c1 > 0 && c2 > 0 && c3 > 0 ) ||
+        (c0 < 0 && c1 < 0 && c2 < 0 && c3 < 0 );
+        if (!allSameSign)continue;//不用break   break会把后面候选丢掉
+        //对边边长相近
+        auto d01 = cv::norm(P1-P0);
+        auto d23 = cv::norm(P2-P3);
+        auto d30 = cv::norm(P3-P0);
+        auto d12 = cv::norm(P1-P2);
+        const double r1 = std::abs(d01-d23) / std::max(d01, d23) ;
+        const double r2 = std::abs(d30-d12) / std::max(d30, d12) ;
+        if(!(r1 < 0.3 && r2 < 0.3)) continue;
+        //这部分是几何检查的 候选conf是经过排序后的 后续可以 加上原来的rm_project
 
-    for (int idx : kept) {
-    auto left_top = cv::Point2f(dets[idx].kpts[0]/scale, dets[idx].kpts[1]/scale);
-    auto left_bottom = cv::Point2f(dets[idx].kpts[2]/scale, dets[idx].kpts[3]/scale);
-    auto right_bottom = cv::Point2f(dets[idx].kpts[4]/scale, dets[idx].kpts[5]/scale);
-    auto right_top = cv::Point2f(dets[idx].kpts[6]/scale, dets[idx].kpts[7]/scale);
-    auto cx = (dets[idx].kpts[0] + dets[idx].kpts[2] + dets[idx].kpts[4] + dets[idx].kpts[6]) / 4 / scale;
-    auto cy = (dets[idx].kpts[1] + dets[idx].kpts[3] + dets[idx].kpts[5] + dets[idx].kpts[7]) / 4 / scale;
-    auto dx = left_bottom.x - left_top.x;
-    auto dy = left_bottom.y - left_top.y;
-    auto angle_rad = atan2(dx, dy);
-    auto angle_deg = angle_rad * 180 / CV_PI;
         f << frameIndx << "," << idx << "," << kClassNames[dets[idx].cls] << "," << dets[idx].conf << "," << cx << "," << cy << "," << angle_deg << "\n";
+        finalKept.push_back(idx);
+        break;
+        }
     }
-    draw(canvas, dets, kept);
+    draw(canvas, dets, finalKept);
+
 }
 // ============ main：只做编排，一眼看清整条管线 ============
 int main(int argc, char** argv) {
